@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cronômetro Imersivo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            background-color: #000;
+            /* Fundo preto caso as imagens demorem */
+        }
+
+        .font-orbitron {
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        /* --- Fundo com Imagens --- */
+        #backgroundSlider {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            /* Atrás de tudo, exceto o body */
+            overflow: hidden;
+            box-shadow: inset 0 0 150px rgba(0, 0, 0, 0.5);
+            /* Vignette */
+        }
+
+        #backgroundSlider img {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            filter: blur(12px) brightness(0.8);
+            /* Mais desfoque, um pouco escuro */
+            opacity: 0;
+            transition: opacity 2s ease-in-out;
+            transform: scale(1.1);
+        }
+
+        #backgroundSlider img.active {
+            opacity: 1;
+        }
+
+        /* --- Barra de Progresso Circular (Grande) --- */
+        .progress-circle {
+            position: relative;
+            /* --- MUDANÇA: Aumentado de 400px para 500px --- */
+            width: 500px;
+            height: 500px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .progress-circle svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .progress-circle circle {
+            fill: none;
+            stroke-width: 20;
+            transform-origin: 50% 50%;
+            transform: rotate(-90deg);
+        }
+
+        .progress-circle .bg-circle {
+            stroke: rgba(255, 255, 255, 0.15);
+            /* Fundo da barra */
+        }
+
+        .progress-circle .fg-circle {
+            stroke: #fff;
+            /* Cor da barra (branca) */
+            transition: stroke-dashoffset 0.3s linear, stroke 0.5s ease;
+        }
+
+        /* --- Tela Preta Final --- */
+        #blackoutOverlay {
+            z-index: 50;
+            /* Acima de tudo */
+            transition: opacity 1.5s ease-in-out;
+        }
+
+        /* --- Botão de Iniciar Gigante --- */
+        #startButton {
+            z-index: 10;
+            background-color: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        #startButton:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+
+<body class="flex items-center justify-center min-h-screen relative overflow-hidden">
+
+    <div id="backgroundSlider"></div>
+
+    <div id="blackoutOverlay" class="fixed top-0 left-0 w-full h-full bg-black hidden opacity-0"></div>
+
+    <div id="startContainer" class="relative z-10">
+        <button id="startButton"
+            class="w-48 h-48 rounded-full flex items-center justify-center text-white shadow-2xl active:scale-95">
+            <svg class="w-28 h-28" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+                <path fill-rule="evenodd"
+                    d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653z"
+                    clip-rule="evenodd" />
+            </svg>
+        </button>
+    </div>
+
+    <div id="timerContainer" class="hidden relative z-10">
+        <div class="progress-circle">
+            <svg>
+                <circle class="bg-circle" cx="50%" cy="50%" r="230"></circle>
+                <circle id="fgCircle" class="fg-circle" cx="50%" cy="50%" r="230"></circle>
+            </svg>
+            <div id="timer" class="absolute font-orbitron text-[7rem] font-bold text-white">
+                05:00
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const initialMinutes = 5;
+        let timeInSeconds = initialMinutes * 60;
+        let countdownInterval;
+        let isRunning = false;
+
+        // Elementos do DOM
+        const backgroundSlider = document.getElementById('backgroundSlider');
+        const blackoutOverlay = document.getElementById('blackoutOverlay');
+        const startContainer = document.getElementById('startContainer');
+        const startButton = document.getElementById('startButton');
+        const timerContainer = document.getElementById('timerContainer');
+        const timerDisplay = document.getElementById('timer');
+        const fgCircle = document.getElementById('fgCircle');
+
+        // Configurações do Círculo
+        const radius = fgCircle.r.baseVal.value;
+        const circumference = 2 * Math.PI * radius;
+        fgCircle.style.strokeDasharray = `${circumference} ${circumference}`;
+        fgCircle.style.strokeDashoffset = circumference;
+
+        // --- MUDANÇA: Imagens de Fundo atualizadas ---
+        const backgroundImages = [
+            'https://cms-imgp.jw-cdn.org/img/p/2022681/univ/art/2022681_univ_cnt_2_lg.jpg',
+            'https://cms-imgp.jw-cdn.org/img/p/2022681/univ/art/2022681_univ_cnt_4_xl.jpg',
+            'https://cms-imgp.jw-cdn.org/img/p/1102025973/univ/art/1102025973_univ_cnt_1_xl.jpg',
+            'https://cms-imgp.jw-cdn.org/img/p/1102025973/univ/art/1102025973_univ_cnt_7_xl.jpg'
+        ];
+        let currentImageIndex = 0;
+
+        function loadBackgroundImages() {
+            backgroundImages.forEach((src, index) => {
+                const img = document.createElement('img');
+                img.src = src;
+                img.onload = () => {
+                    backgroundSlider.appendChild(img);
+                    if (index === 0) img.classList.add('active');
+                };
+            });
+
+            setInterval(() => {
+                const currentActive = document.querySelector('#backgroundSlider img.active');
+                if (currentActive) currentActive.classList.remove('active');
+                currentImageIndex = (currentImageIndex + 1) % backgroundImages.length;
+                const nextImage = backgroundSlider.children[currentImageIndex];
+                if (nextImage) nextImage.classList.add('active');
+            }, 8000); // Troca a cada 8 segundos
+        }
+
+        function setProgress(percent) {
+            const offset = circumference - (percent / 100) * circumference;
+            fgCircle.style.strokeDashoffset = offset;
+        }
+
+        function updateDisplay() {
+            const minutes = Math.floor(timeInSeconds / 60);
+            const seconds = timeInSeconds % 60;
+            timerDisplay.textContent =
+                `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+            const totalSeconds = initialMinutes * 60;
+            const percent = (timeInSeconds / totalSeconds) * 100;
+            setProgress(percent);
+
+            // Mudança de cor sutil da barra
+            fgCircle.classList.remove('stroke-white', 'stroke-yellow-300', 'stroke-red-500');
+            if (timeInSeconds <= 10) {
+                fgCircle.classList.add('stroke-red-500');
+            } else if (timeInSeconds <= 60) {
+                fgCircle.classList.add('stroke-yellow-300');
+            } else {
+                fgCircle.classList.add('stroke-white');
+            }
+        }
+
+        function startTimer() {
+            if (isRunning) return;
+
+            // 1. Entrar em Tela Cheia
+            document.documentElement.requestFullscreen().catch(err => {
+                console.warn(`Erro ao tentar entrar em tela cheia: ${err.message}`);
+            });
+
+            // 2. Trocar UI
+            startContainer.classList.add('hidden');
+            timerContainer.classList.remove('hidden');
+
+            // 3. Iniciar Contagem
+            isRunning = true;
+            countdownInterval = setInterval(() => {
+                timeInSeconds--;
+                updateDisplay();
+
+                if (timeInSeconds <= 0) {
+                    clearInterval(countdownInterval);
+                    isRunning = false;
+                    showBlackout();
+                }
+            }, 1000);
+        }
+
+        function showBlackout() {
+            // Esconde o timer
+            timerContainer.classList.add('hidden');
+
+            // Mostra a tela preta com fade-in
+            blackoutOverlay.classList.remove('hidden');
+            // Força o navegador a aplicar o 'hidden' antes de mudar a opacidade
+            requestAnimationFrame(() => {
+                blackoutOverlay.classList.remove('opacity-0');
+            });
+        }
+
+        function resetApp() {
+            // 1. Limpar timer
+            clearInterval(countdownInterval);
+            isRunning = false;
+            timeInSeconds = initialMinutes * 60;
+            updateDisplay(); // Reseta o display para 05:00 e a barra
+
+            // 2. Esconder tela preta e timer
+            blackoutOverlay.classList.add('hidden', 'opacity-0');
+            timerContainer.classList.add('hidden');
+
+            // 3. Mostrar botão de start
+            startContainer.classList.remove('hidden');
+        }
+
+        // --- Event Listeners ---
+
+        // Inicia o timer ao clicar no botão
+        startButton.addEventListener('click', startTimer);
+
+        // Reseta o app quando o usuário sai da tela cheia (pressionando Esc)
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement) {
+                // Se saiu da tela cheia, reseta tudo
+                resetApp();
+            }
+        });
+
+        // --- Inicialização ---
+        updateDisplay(); // Define o estado inicial (05:00)
+        loadBackgroundImages(); // Começa a carregar as imagens de fundo
+    </script>
+
+</body>
+
+</html>
