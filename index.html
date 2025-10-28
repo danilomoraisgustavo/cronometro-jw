@@ -2,59 +2,66 @@
 <html lang="pt-br">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cronômetro Imersivo</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cronômetro</title>
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap" rel="stylesheet" />
 
     <style>
+        :root {
+            color-scheme: dark;
+        }
+
+        html,
         body {
-            background-color: #000;
-            /* Fundo preto caso as imagens demorem */
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            background: #000;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
         }
 
         .font-orbitron {
             font-family: 'Orbitron', sans-serif;
         }
 
-        /* --- Fundo com Imagens --- */
+        /* Fundo com DIVs (sem <img>) */
         #backgroundSlider {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            inset: 0;
             z-index: 1;
-            /* Atrás de tudo, exceto o body */
             overflow: hidden;
-            box-shadow: inset 0 0 150px rgba(0, 0, 0, 0.5);
-            /* Vignette */
+            box-shadow: inset 0 0 150px rgba(0, 0, 0, .5);
         }
 
-        #backgroundSlider img {
+        .bg-slide {
             position: absolute;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            filter: blur(12px) brightness(0.8);
-            /* Mais desfoque, um pouco escuro */
+            inset: 0;
             opacity: 0;
             transition: opacity 2s ease-in-out;
+            background-size: cover;
+            background-position: center center;
+            filter: blur(12px) brightness(.8);
             transform: scale(1.1);
+            pointer-events: none;
+            /* não clicável */
         }
 
-        #backgroundSlider img.active {
+        .bg-slide.active {
             opacity: 1;
         }
 
-        /* --- Barra de Progresso Circular (Grande) --- */
+        /* Barra circular */
         .progress-circle {
             position: relative;
-            /* --- MUDANÇA: Aumentado de 400px para 500px --- */
             width: 500px;
             height: 500px;
             border-radius: 50%;
@@ -65,8 +72,7 @@
 
         .progress-circle svg {
             position: absolute;
-            top: 0;
-            left: 0;
+            inset: 0;
             width: 100%;
             height: 100%;
         }
@@ -78,77 +84,79 @@
             transform: rotate(-90deg);
         }
 
-        .progress-circle .bg-circle {
-            stroke: rgba(255, 255, 255, 0.15);
-            /* Fundo da barra */
+        .bg-circle {
+            stroke: rgba(255, 255, 255, .15);
         }
 
-        .progress-circle .fg-circle {
+        .fg-circle {
             stroke: #fff;
-            /* Cor da barra (branca) */
-            transition: stroke-dashoffset 0.3s linear, stroke 0.5s ease;
+            transition: stroke-dashoffset .3s linear, stroke .5s ease;
         }
 
-        /* --- Tela Preta Final --- */
+        /* Tela preta final */
         #blackoutOverlay {
             z-index: 50;
-            /* Acima de tudo */
             transition: opacity 1.5s ease-in-out;
         }
 
-        /* --- Botão de Iniciar Gigante --- */
+        /* Botão iniciar */
         #startButton {
             z-index: 10;
-            background-color: rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, .1);
             backdrop-filter: blur(5px);
             -webkit-backdrop-filter: blur(5px);
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            transition: all 0.3s ease;
+            border: 2px solid rgba(255, 255, 255, .3);
+            transition: all .3s ease;
+            -webkit-user-drag: none;
         }
 
         #startButton:hover {
-            background-color: rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, .2);
             transform: scale(1.05);
+        }
+
+        /* Impedir drag de tudo */
+        * {
+            -webkit-user-drag: none;
         }
     </style>
 </head>
 
-<body class="flex items-center justify-center min-h-screen relative overflow-hidden">
+<body class="flex items-center justify-center min-h-screen relative overflow-hidden" oncontextmenu="return false">
+    <!-- bloqueia clique direito -->
 
-    <div id="backgroundSlider"></div>
+    <div id="backgroundSlider" aria-hidden="true"></div>
 
     <div id="blackoutOverlay" class="fixed top-0 left-0 w-full h-full bg-black hidden opacity-0"></div>
 
-    <div id="startContainer" class="relative z-10">
+    <div id="startContainer" class="relative z-10 select-none">
         <button id="startButton"
             class="w-48 h-48 rounded-full flex items-center justify-center text-white shadow-2xl active:scale-95">
-            <svg class="w-28 h-28" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+            <svg class="w-28 h-28" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"
+                aria-hidden="true">
                 <path fill-rule="evenodd"
                     d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653z"
                     clip-rule="evenodd" />
             </svg>
+            <span class="sr-only">Iniciar cronômetro</span>
         </button>
     </div>
 
-    <div id="timerContainer" class="hidden relative z-10">
+    <div id="timerContainer" class="hidden relative z-10 select-none" aria-live="polite">
         <div class="progress-circle">
-            <svg>
+            <svg role="img" aria-label="Progresso do tempo">
                 <circle class="bg-circle" cx="50%" cy="50%" r="230"></circle>
                 <circle id="fgCircle" class="fg-circle" cx="50%" cy="50%" r="230"></circle>
             </svg>
-            <div id="timer" class="absolute font-orbitron text-[7rem] font-bold text-white">
-                05:00
-            </div>
+            <div id="timer" class="absolute font-orbitron text-[7rem] font-bold text-white">05:00</div>
         </div>
     </div>
 
     <script>
         const initialMinutes = 5;
         let timeInSeconds = initialMinutes * 60;
-        let countdownInterval;
-        let isRunning = false;
+        let countdownInterval, isRunning = false;
 
-        // Elementos do DOM
         const backgroundSlider = document.getElementById('backgroundSlider');
         const blackoutOverlay = document.getElementById('blackoutOverlay');
         const startContainer = document.getElementById('startContainer');
@@ -157,13 +165,13 @@
         const timerDisplay = document.getElementById('timer');
         const fgCircle = document.getElementById('fgCircle');
 
-        // Configurações do Círculo
+        // círculo
         const radius = fgCircle.r.baseVal.value;
         const circumference = 2 * Math.PI * radius;
         fgCircle.style.strokeDasharray = `${circumference} ${circumference}`;
         fgCircle.style.strokeDashoffset = circumference;
 
-        // --- MUDANÇA: Imagens de Fundo atualizadas ---
+        // imagens agora como background em DIV (sem <img>)
         const backgroundImages = [
             'https://cms-imgp.jw-cdn.org/img/p/2022681/univ/art/2022681_univ_cnt_2_lg.jpg',
             'https://cms-imgp.jw-cdn.org/img/p/2022681/univ/art/2022681_univ_cnt_4_xl.jpg',
@@ -174,21 +182,19 @@
 
         function loadBackgroundImages() {
             backgroundImages.forEach((src, index) => {
-                const img = document.createElement('img');
-                img.src = src;
-                img.onload = () => {
-                    backgroundSlider.appendChild(img);
-                    if (index === 0) img.classList.add('active');
-                };
+                const slide = document.createElement('div');
+                slide.className = 'bg-slide' + (index === 0 ? ' active' : '');
+                slide.style.backgroundImage = `url('${src}')`;
+                backgroundSlider.appendChild(slide);
             });
 
             setInterval(() => {
-                const currentActive = document.querySelector('#backgroundSlider img.active');
-                if (currentActive) currentActive.classList.remove('active');
-                currentImageIndex = (currentImageIndex + 1) % backgroundImages.length;
-                const nextImage = backgroundSlider.children[currentImageIndex];
-                if (nextImage) nextImage.classList.add('active');
-            }, 8000); // Troca a cada 8 segundos
+                const slides = backgroundSlider.children;
+                if (!slides.length) return;
+                slides[currentImageIndex]?.classList.remove('active');
+                currentImageIndex = (currentImageIndex + 1) % slides.length;
+                slides[currentImageIndex]?.classList.add('active');
+            }, 8000);
         }
 
         function setProgress(percent) {
@@ -197,97 +203,69 @@
         }
 
         function updateDisplay() {
-            const minutes = Math.floor(timeInSeconds / 60);
-            const seconds = timeInSeconds % 60;
-            timerDisplay.textContent =
-                `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            const m = Math.floor(timeInSeconds / 60);
+            const s = timeInSeconds % 60;
+            timerDisplay.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 
-            const totalSeconds = initialMinutes * 60;
-            const percent = (timeInSeconds / totalSeconds) * 100;
-            setProgress(percent);
+            const total = initialMinutes * 60;
+            setProgress((timeInSeconds / total) * 100);
 
-            // Mudança de cor sutil da barra
             fgCircle.classList.remove('stroke-white', 'stroke-yellow-300', 'stroke-red-500');
-            if (timeInSeconds <= 10) {
-                fgCircle.classList.add('stroke-red-500');
-            } else if (timeInSeconds <= 60) {
-                fgCircle.classList.add('stroke-yellow-300');
-            } else {
-                fgCircle.classList.add('stroke-white');
-            }
+            if (timeInSeconds <= 10) fgCircle.classList.add('stroke-red-500');
+            else if (timeInSeconds <= 60) fgCircle.classList.add('stroke-yellow-300');
+            else fgCircle.classList.add('stroke-white');
         }
 
         function startTimer() {
             if (isRunning) return;
-
-            // 1. Entrar em Tela Cheia
-            document.documentElement.requestFullscreen().catch(err => {
-                console.warn(`Erro ao tentar entrar em tela cheia: ${err.message}`);
-            });
-
-            // 2. Trocar UI
+            document.documentElement.requestFullscreen().catch(() => { });
             startContainer.classList.add('hidden');
             timerContainer.classList.remove('hidden');
-
-            // 3. Iniciar Contagem
             isRunning = true;
             countdownInterval = setInterval(() => {
-                timeInSeconds--;
-                updateDisplay();
-
+                timeInSeconds--; updateDisplay();
                 if (timeInSeconds <= 0) {
-                    clearInterval(countdownInterval);
-                    isRunning = false;
-                    showBlackout();
+                    clearInterval(countdownInterval); isRunning = false; showBlackout();
                 }
             }, 1000);
         }
 
         function showBlackout() {
-            // Esconde o timer
             timerContainer.classList.add('hidden');
-
-            // Mostra a tela preta com fade-in
             blackoutOverlay.classList.remove('hidden');
-            // Força o navegador a aplicar o 'hidden' antes de mudar a opacidade
-            requestAnimationFrame(() => {
-                blackoutOverlay.classList.remove('opacity-0');
-            });
+            requestAnimationFrame(() => blackoutOverlay.classList.remove('opacity-0'));
         }
 
         function resetApp() {
-            // 1. Limpar timer
             clearInterval(countdownInterval);
             isRunning = false;
             timeInSeconds = initialMinutes * 60;
-            updateDisplay(); // Reseta o display para 05:00 e a barra
-
-            // 2. Esconder tela preta e timer
+            updateDisplay();
             blackoutOverlay.classList.add('hidden', 'opacity-0');
             timerContainer.classList.add('hidden');
-
-            // 3. Mostrar botão de start
             startContainer.classList.remove('hidden');
         }
 
-        // --- Event Listeners ---
-
-        // Inicia o timer ao clicar no botão
+        // Eventos
         startButton.addEventListener('click', startTimer);
-
-        // Reseta o app quando o usuário sai da tela cheia (pressionando Esc)
         document.addEventListener('fullscreenchange', () => {
-            if (!document.fullscreenElement) {
-                // Se saiu da tela cheia, reseta tudo
-                resetApp();
-            }
+            if (!document.fullscreenElement) resetApp();
         });
 
-        // --- Inicialização ---
-        updateDisplay(); // Define o estado inicial (05:00)
-        loadBackgroundImages(); // Começa a carregar as imagens de fundo
-    </script>
+        // Bloqueios “soft”
+        document.addEventListener('dragstart', e => e.preventDefault());
+        document.addEventListener('copy', e => e.preventDefault());
+        document.addEventListener('cut', e => e.preventDefault());
+        document.addEventListener('keydown', e => {
+            const k = e.key?.toLowerCase();
+            if ((e.ctrlKey || e.metaKey) && ['s', 'p', 'u', 'c', 'i', 'j'].includes(k)) e.preventDefault(); // Ctrl+S,P,U,C,I,J
+            if (k === 'f12') e.preventDefault(); // F12
+        });
 
+        // Inicialização
+        updateDisplay();
+        loadBackgroundImages();
+    </script>
 </body>
 
 </html>
