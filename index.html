@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="pt-br">
 
@@ -52,7 +53,6 @@
             filter: blur(12px) brightness(.8);
             transform: scale(1.1);
             pointer-events: none;
-            /* não clicável */
         }
 
         .bg-slide.active {
@@ -123,8 +123,6 @@
 </head>
 
 <body class="flex items-center justify-center min-h-screen relative overflow-hidden" oncontextmenu="return false">
-    <!-- bloqueia clique direito -->
-
     <div id="backgroundSlider" aria-hidden="true"></div>
 
     <div id="blackoutOverlay" class="fixed top-0 left-0 w-full h-full bg-black hidden opacity-0"></div>
@@ -148,15 +146,17 @@
                 <circle class="bg-circle" cx="50%" cy="50%" r="230"></circle>
                 <circle id="fgCircle" class="fg-circle" cx="50%" cy="50%" r="230"></circle>
             </svg>
-            <div id="timer" class="absolute font-orbitron text-[7rem] font-bold text-white">05:00</div>
+            <div id="timer" class="absolute font-orbitron text-[7rem] font-bold text-white">00:00</div>
         </div>
     </div>
 
     <script>
-        const initialMinutes = 5;
-        let timeInSeconds = initialMinutes * 60;
-        let countdownInterval, isRunning = false;
+        // ======= CONFIG =======
+        const TARGET_HOUR = 19;    // 19:00
+        const TARGET_MIN = 40;
+        const TARGET_SEC = 0;
 
+        // ======= DOM =======
         const backgroundSlider = document.getElementById('backgroundSlider');
         const blackoutOverlay = document.getElementById('blackoutOverlay');
         const startContainer = document.getElementById('startContainer');
@@ -165,13 +165,19 @@
         const timerDisplay = document.getElementById('timer');
         const fgCircle = document.getElementById('fgCircle');
 
+        // ======= STATE =======
+        let timeInSeconds = 0;
+        let totalAtStart = 1; // evita divisão por zero
+        let countdownInterval;
+        let isRunning = false;
+
         // círculo
         const radius = fgCircle.r.baseVal.value;
         const circumference = 2 * Math.PI * radius;
         fgCircle.style.strokeDasharray = `${circumference} ${circumference}`;
         fgCircle.style.strokeDashoffset = circumference;
 
-        // imagens agora como background em DIV (sem <img>)
+        // imagens como background em DIV (sem <img>)
         const backgroundImages = [
             'https://cms-imgp.jw-cdn.org/img/p/2022681/univ/art/2022681_univ_cnt_2_lg.jpg',
             'https://cms-imgp.jw-cdn.org/img/p/2022681/univ/art/2022681_univ_cnt_4_xl.jpg',
@@ -198,36 +204,42 @@
         }
 
         function setProgress(percent) {
-            const offset = circumference - (percent / 100) * circumference;
+            const clamped = Math.max(0, Math.min(100, percent));
+            const offset = circumference - (clamped / 100) * circumference;
             fgCircle.style.strokeDashoffset = offset;
         }
 
-        function updateDisplay() {
-            const m = Math.floor(timeInSeconds / 60);
-            const s = timeInSeconds % 60;
-            timerDisplay.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        function formatMMSS(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        }
 
-            const total = initialMinutes * 60;
-            setProgress((timeInSeconds / total) * 100);
+        function getSecondsUntilTodayTarget() {
+            const now = new Date();
+            const target = new Date(
+                now.getFullYear(),
+                now.getMonth(),
+                now.getDate(),
+                TARGET_HOUR,
+                TARGET_MIN,
+                TARGET_SEC,
+                0
+            );
+            const diffMs = target.getTime() - now.getTime();
+            return Math.max(0, Math.floor(diffMs / 1000));
+        }
+
+        function updateDisplay() {
+            timerDisplay.textContent = formatMMSS(timeInSeconds);
+
+            const percent = (timeInSeconds / totalAtStart) * 100;
+            setProgress(percent);
 
             fgCircle.classList.remove('stroke-white', 'stroke-yellow-300', 'stroke-red-500');
             if (timeInSeconds <= 10) fgCircle.classList.add('stroke-red-500');
             else if (timeInSeconds <= 60) fgCircle.classList.add('stroke-yellow-300');
             else fgCircle.classList.add('stroke-white');
-        }
-
-        function startTimer() {
-            if (isRunning) return;
-            document.documentElement.requestFullscreen().catch(() => { });
-            startContainer.classList.add('hidden');
-            timerContainer.classList.remove('hidden');
-            isRunning = true;
-            countdownInterval = setInterval(() => {
-                timeInSeconds--; updateDisplay();
-                if (timeInSeconds <= 0) {
-                    clearInterval(countdownInterval); isRunning = false; showBlackout();
-                }
-            }, 1000);
         }
 
         function showBlackout() {
@@ -236,20 +248,150 @@
             requestAnimationFrame(() => blackoutOverlay.classList.remove('opacity-0'));
         }
 
+        function tryClosePage() {
+            // Alguns navegadores só permitem fechar se a aba/janela foi aberta via window.open().
+            try { window.close(); } catch (_) { }
+            // Fallback visual: mantém a tela preta.
+            // (Se precisar, você pode redirecionar para about:blank, mas geralmente não é necessário.)
+        }
+
+        function finishAndClose() {
+            clearInterval(countdownInterval);
+            isRunning = false;
+            showBlackout();
+            setTimeout(tryClosePage, 700);
+        }
+
         function resetApp() {
             clearInterval(countdownInterval);
             isRunning = false;
-            timeInSeconds = initialMinutes * 60;
+
+            timeInSeconds = getSecondsUntilTodayTarget();
+            totalAtStart = Math.max(1, timeInSeconds);
+
             updateDisplay();
             blackoutOverlay.classList.add('hidden', 'opacity-0');
             timerContainer.classList.add('hidden');
             startContainer.classList.remove('hidden');
         }
 
-        // Eventos
+        // ======= SEGUNDA TELA (quando disponível) =======
+        function isAutostartWindow() {
+            const p = new URLSearchParams(location.search);
+            return p.get('autostart') === '1';
+        }
+
+        function isPopupWindow() {
+            const p = new URLSearchParams(location.search);
+            return p.get('popup') === '1';
+        }
+
+        async function openOnSecondScreenIfPossible() {
+            // Só tenta abrir na segunda tela na janela "principal" (evita loop)
+            if (isPopupWindow()) return false;
+
+            const baseUrl = new URL(location.href);
+            baseUrl.searchParams.set('popup', '1');
+            baseUrl.searchParams.set('autostart', '1');
+
+            // 1) Melhor caso: Window Placement API (Chrome/Edge, depende de permissão)
+            if ('getScreenDetails' in window) {
+                try {
+                    const details = await window.getScreenDetails();
+                    if (details?.screens?.length > 1) {
+                        const current = details.currentScreen;
+                        const second = details.screens.find(s => s !== current) || details.screens[1];
+
+                        const left = Math.round(second.availLeft ?? second.left ?? 0);
+                        const top = Math.round(second.availTop ?? second.top ?? 0);
+                        const width = Math.round(second.availWidth ?? second.width ?? 1280);
+                        const height = Math.round(second.availHeight ?? second.height ?? 720);
+
+                        const win = window.open(
+                            baseUrl.toString(),
+                            'cronometro_second_screen',
+                            `popup=yes,left=${left},top=${top},width=${width},height=${height}`
+                        );
+
+                        if (win) {
+                            try { win.focus(); } catch (_) { }
+                            // tenta fechar a atual (pode falhar em abas normais)
+                            try { window.close(); } catch (_) { }
+                            return true;
+                        }
+                    }
+                } catch (_) {
+                    // sem permissão / não suportado: cai no fallback
+                }
+            }
+
+            // 2) Fallback simples: tenta abrir uma nova janela e "jogar" pra direita
+            // (Funciona em setups comuns onde a segunda tela fica à direita)
+            try {
+                const approxLeft = (window.screenX || 0) + (window.outerWidth || 1200);
+                const approxTop = (window.screenY || 0);
+                const win = window.open(
+                    baseUrl.toString(),
+                    'cronometro_second_screen',
+                    `popup=yes,left=${approxLeft},top=${approxTop},width=${window.outerWidth || 1200},height=${window.outerHeight || 800}`
+                );
+
+                if (win) {
+                    try { win.focus(); } catch (_) { }
+                    try { window.close(); } catch (_) { }
+                    return true;
+                }
+            } catch (_) { }
+
+            return false;
+        }
+
+        // ======= TIMER =======
+        async function startTimer() {
+            if (isRunning) return;
+
+            // Sempre que der play: se tiver tela estendida, tenta abrir na segunda tela
+            const moved = await openOnSecondScreenIfPossible();
+            if (moved) return; // a outra janela vai autostartar
+
+            // calcula contagem regressiva até 19:00 de hoje
+            timeInSeconds = getSecondsUntilTodayTarget();
+            totalAtStart = Math.max(1, timeInSeconds);
+
+            // se já passou de 19:00, já finaliza e fecha
+            if (timeInSeconds <= 0) {
+                startContainer.classList.add('hidden');
+                timerContainer.classList.remove('hidden');
+                updateDisplay();
+                finishAndClose();
+                return;
+            }
+
+            // entra em fullscreen (pode falhar, depende do navegador)
+            document.documentElement.requestFullscreen().catch(() => { });
+
+            startContainer.classList.add('hidden');
+            timerContainer.classList.remove('hidden');
+            isRunning = true;
+
+            updateDisplay();
+
+            countdownInterval = setInterval(() => {
+                timeInSeconds--;
+                updateDisplay();
+
+                if (timeInSeconds <= 0) {
+                    finishAndClose();
+                }
+            }, 1000);
+        }
+
+        // ======= EVENTOS =======
         startButton.addEventListener('click', startTimer);
+
         document.addEventListener('fullscreenchange', () => {
-            if (!document.fullscreenElement) resetApp();
+            // Se sair do fullscreen manualmente antes do fim, reseta a UI
+            if (!document.fullscreenElement && isRunning) resetApp();
         });
 
         // Bloqueios “soft”
@@ -258,14 +400,21 @@
         document.addEventListener('cut', e => e.preventDefault());
         document.addEventListener('keydown', e => {
             const k = e.key?.toLowerCase();
-            if ((e.ctrlKey || e.metaKey) && ['s', 'p', 'u', 'c', 'i', 'j'].includes(k)) e.preventDefault(); // Ctrl+S,P,U,C,I,J
-            if (k === 'f12') e.preventDefault(); // F12
+            if ((e.ctrlKey || e.metaKey) && ['s', 'p', 'u', 'c', 'i', 'j'].includes(k)) e.preventDefault();
+            if (k === 'f12') e.preventDefault();
         });
 
-        // Inicialização
-        updateDisplay();
+        // ======= INICIALIZAÇÃO =======
         loadBackgroundImages();
+        resetApp();
+
+        // Se abriu na janela "da segunda tela" com autostart=1, inicia automaticamente.
+        if (isAutostartWindow()) {
+            // Pequeno delay para garantir layout/paint
+            setTimeout(() => startTimer(), 50);
+        }
     </script>
 </body>
 
 </html>
+```
