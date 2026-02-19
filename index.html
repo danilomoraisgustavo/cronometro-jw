@@ -248,7 +248,6 @@
         }
 
         function tryClosePage() {
-            // Alguns navegadores só permitem fechar se a aba/janela foi aberta via window.open().
             try { window.close(); } catch (_) { }
         }
 
@@ -314,14 +313,13 @@
         }
 
         async function openOnSecondScreenIfPossible() {
-            // Só tenta abrir na segunda tela na janela "principal" (evita loop)
-            if (isPopupWindow()) return false;
+            if (isPopupWindow()) return false; // evita loop
 
             const baseUrl = new URL(location.href);
             baseUrl.searchParams.set('popup', '1');
             baseUrl.searchParams.set('autostart', '1');
 
-            // 1) Melhor caso: Window Placement API (Chrome/Edge, depende de permissão)
+            // 1) Window Placement API (se disponível e permitido)
             if ('getScreenDetails' in window) {
                 try {
                     const details = await window.getScreenDetails();
@@ -346,12 +344,10 @@
                             return true;
                         }
                     }
-                } catch (_) {
-                    // sem permissão / não suportado: cai no fallback
-                }
+                } catch (_) { }
             }
 
-            // 2) Fallback simples: tenta abrir uma nova janela e "jogar" pra direita
+            // 2) Fallback simples
             try {
                 const approxLeft = (window.screenX || 0) + (window.outerWidth || 1200);
                 const approxTop = (window.screenY || 0);
@@ -376,15 +372,12 @@
         async function startTimer() {
             if (isRunning) return;
 
-            // Sempre que der play: se tiver tela estendida, tenta abrir na segunda tela
             const moved = await openOnSecondScreenIfPossible();
             if (moved) return; // a outra janela vai autostartar
 
-            // calcula contagem regressiva até 19:45 de hoje
             timeInSeconds = getSecondsUntilTodayTarget();
             totalAtStart = Math.max(1, timeInSeconds);
 
-            // se já passou do horário alvo, finaliza e tenta fechar
             if (timeInSeconds <= 0) {
                 startContainer.classList.add('hidden');
                 timerContainer.classList.remove('hidden');
@@ -393,7 +386,6 @@
                 return;
             }
 
-            // tenta entrar em fullscreen (na janela principal, funciona no clique)
             await requestFullscreenSafe();
 
             startContainer.classList.add('hidden');
@@ -405,10 +397,7 @@
             countdownInterval = setInterval(() => {
                 timeInSeconds--;
                 updateDisplay();
-
-                if (timeInSeconds <= 0) {
-                    finishAndClose();
-                }
+                if (timeInSeconds <= 0) finishAndClose();
             }, 1000);
         }
 
@@ -416,12 +405,24 @@
         startButton.addEventListener('click', startTimer);
 
         document.addEventListener('fullscreenchange', () => {
-            // Se sair do fullscreen manualmente antes do fim, reseta a UI
             if (!document.fullscreenElement && isRunning) resetApp();
         });
 
+        // ======= BLOQUEIOS (mais fortes contra "arrastar html") =======
+        document.addEventListener('dragstart', e => e.preventDefault(), true);
+        document.addEventListener('drop', e => e.preventDefault(), true);
+        document.addEventListener('selectstart', e => e.preventDefault(), true);
+
+        // impede “arrasto”/seleção enquanto o timer estiver rodando (evita o ícone "html" no macOS)
+        document.addEventListener('mousedown', (e) => {
+            if (isRunning) e.preventDefault();
+        }, { passive: false });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isRunning && (e.buttons & 1)) e.preventDefault();
+        }, { passive: false });
+
         // Bloqueios “soft”
-        document.addEventListener('dragstart', e => e.preventDefault());
         document.addEventListener('copy', e => e.preventDefault());
         document.addEventListener('cut', e => e.preventDefault());
         document.addEventListener('keydown', e => {
@@ -434,8 +435,6 @@
         loadBackgroundImages();
         resetApp();
 
-        // Se abriu na janela "da segunda tela" com autostart=1, inicia automaticamente.
-        // Fullscreen automático será bloqueado; então armamos para o 1º clique/tecla.
         if (isAutostartWindow()) {
             armFullscreenOnFirstUserGesture();
             setTimeout(() => startTimer(), 50);
