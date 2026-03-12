@@ -33,7 +33,6 @@
             font-family: 'Orbitron', sans-serif;
         }
 
-        /* Fundo com DIVs (sem <img>) */
         #backgroundSlider {
             position: fixed;
             inset: 0;
@@ -58,7 +57,6 @@
             opacity: 1;
         }
 
-        /* Barra circular */
         .progress-circle {
             position: relative;
             width: 500px;
@@ -92,13 +90,11 @@
             transition: stroke-dashoffset .3s linear, stroke .5s ease;
         }
 
-        /* Tela preta final */
         #blackoutOverlay {
             z-index: 50;
             transition: opacity 1.5s ease-in-out;
         }
 
-        /* Botão iniciar */
         #startButton {
             z-index: 10;
             background: rgba(255, 255, 255, .1);
@@ -114,9 +110,90 @@
             transform: scale(1.05);
         }
 
-        /* Impedir drag de tudo */
+        .config-panel {
+            background: rgba(0, 0, 0, .35);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, .14);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, .25);
+        }
+
+        .time-input {
+            background: rgba(255, 255, 255, .08);
+            border: 1px solid rgba(255, 255, 255, .16);
+            color: #fff;
+        }
+
+        .time-input:focus {
+            outline: none;
+            border-color: rgba(255, 255, 255, .35);
+            box-shadow: 0 0 0 3px rgba(255, 255, 255, .08);
+        }
+
+        .preset-btn {
+            background: rgba(255, 255, 255, .08);
+            border: 1px solid rgba(255, 255, 255, .12);
+            transition: all .2s ease;
+        }
+
+        .preset-btn:hover {
+            background: rgba(255, 255, 255, .16);
+            transform: translateY(-1px);
+        }
+
+        .preset-btn.active {
+            background: rgba(255, 255, 255, .18);
+            border-color: rgba(255, 255, 255, .3);
+        }
+
+        .target-badge {
+            background: rgba(255, 255, 255, .08);
+            border: 1px solid rgba(255, 255, 255, .1);
+        }
+
         * {
             -webkit-user-drag: none;
+        }
+
+        @media (max-width: 768px) {
+            .progress-circle {
+                width: 320px;
+                height: 320px;
+            }
+
+            .progress-circle circle {
+                stroke-width: 18;
+            }
+
+            .progress-circle .bg-circle,
+            .progress-circle .fg-circle {
+                r: 145;
+            }
+
+            #timer {
+                font-size: 4rem !important;
+            }
+
+            #startButton {
+                width: 9rem;
+                height: 9rem;
+            }
+
+            #startButton svg {
+                width: 4rem;
+                height: 4rem;
+            }
+        }
+
+        @media (max-width: 420px) {
+            .progress-circle {
+                width: 270px;
+                height: 270px;
+            }
+
+            #timer {
+                font-size: 3.2rem !important;
+            }
         }
     </style>
 </head>
@@ -126,7 +203,35 @@
 
     <div id="blackoutOverlay" class="fixed top-0 left-0 w-full h-full bg-black hidden opacity-0"></div>
 
-    <div id="startContainer" class="relative z-10 select-none">
+    <div id="startContainer" class="relative z-10 select-none flex flex-col items-center gap-6 px-4">
+        <div class="config-panel rounded-3xl px-5 py-5 w-full max-w-md text-white">
+            <div class="text-center mb-4">
+                <div class="text-sm uppercase tracking-[0.25em] text-white/60">Configuração</div>
+                <h1 class="text-2xl font-semibold mt-2">Escolha o horário alvo</h1>
+                <p class="text-sm text-white/70 mt-2">Defina a hora da reunião e depois toque em iniciar.</p>
+            </div>
+
+            <div class="mb-4">
+                <label for="targetTimeInput" class="block text-sm text-white/80 mb-2">Horário</label>
+                <input id="targetTimeInput" type="time" step="60"
+                    class="time-input w-full rounded-2xl px-4 py-3 text-lg" />
+            </div>
+
+            <div class="mb-4">
+                <div class="text-sm text-white/80 mb-2">Horários rápidos</div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <button class="preset-btn preset-time rounded-xl px-3 py-2 text-sm" data-time="09:00">09:00</button>
+                    <button class="preset-btn preset-time rounded-xl px-3 py-2 text-sm" data-time="18:00">18:00</button>
+                    <button class="preset-btn preset-time rounded-xl px-3 py-2 text-sm" data-time="19:00">19:00</button>
+                    <button class="preset-btn preset-time rounded-xl px-3 py-2 text-sm" data-time="19:45">19:45</button>
+                </div>
+            </div>
+
+            <div id="targetInfo" class="target-badge rounded-2xl px-4 py-3 text-sm text-white/85">
+                Alvo programado: --
+            </div>
+        </div>
+
         <button id="startButton"
             class="w-48 h-48 rounded-full flex items-center justify-center text-white shadow-2xl active:scale-95">
             <svg class="w-28 h-28" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24"
@@ -151,9 +256,8 @@
 
     <script>
         // ======= CONFIG =======
-        const TARGET_HOUR = 19;    // 19:45
-        const TARGET_MIN = 45;
-        const TARGET_SEC = 0;
+        const DEFAULT_TARGET_TIME = '19:45';
+        const STORAGE_KEY = 'cronometro_target_time';
 
         // ======= DOM =======
         const backgroundSlider = document.getElementById('backgroundSlider');
@@ -163,20 +267,31 @@
         const timerContainer = document.getElementById('timerContainer');
         const timerDisplay = document.getElementById('timer');
         const fgCircle = document.getElementById('fgCircle');
+        const targetTimeInput = document.getElementById('targetTimeInput');
+        const targetInfo = document.getElementById('targetInfo');
+        const presetButtons = document.querySelectorAll('.preset-time');
 
         // ======= STATE =======
         let timeInSeconds = 0;
-        let totalAtStart = 1; // evita divisão por zero
+        let totalAtStart = 1;
         let countdownInterval;
         let isRunning = false;
+        let targetDateTime = null;
 
         // círculo
-        const radius = fgCircle.r.baseVal.value;
-        const circumference = 2 * Math.PI * radius;
+        let radius = fgCircle.r.baseVal.value;
+        let circumference = 2 * Math.PI * radius;
         fgCircle.style.strokeDasharray = `${circumference} ${circumference}`;
         fgCircle.style.strokeDashoffset = circumference;
 
-        // imagens como background em DIV (sem <img>)
+        function refreshCircleMetrics() {
+            radius = fgCircle.r.baseVal.value;
+            circumference = 2 * Math.PI * radius;
+            fgCircle.style.strokeDasharray = `${circumference} ${circumference}`;
+            fgCircle.style.strokeDashoffset = circumference;
+        }
+
+        // imagens como background em DIV
         const backgroundImages = [
             'https://cms-imgp.jw-cdn.org/img/p/2022681/univ/art/2022681_univ_cnt_2_lg.jpg',
             'https://cms-imgp.jw-cdn.org/img/p/2022681/univ/art/2022681_univ_cnt_4_xl.jpg',
@@ -214,19 +329,104 @@
             return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
         }
 
-        function getSecondsUntilTodayTarget() {
+        function pad2(n) {
+            return String(n).padStart(2, '0');
+        }
+
+        function parseTargetTime(value) {
+            const [hh = '19', mm = '45'] = String(value || DEFAULT_TARGET_TIME).split(':');
+            const hour = Math.max(0, Math.min(23, Number(hh)));
+            const minute = Math.max(0, Math.min(59, Number(mm)));
+            return { hour, minute };
+        }
+
+        function getSelectedTimeString() {
+            return targetTimeInput.value || DEFAULT_TARGET_TIME;
+        }
+
+        function saveSelectedTime() {
+            localStorage.setItem(STORAGE_KEY, getSelectedTimeString());
+        }
+
+        function loadSelectedTime() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            targetTimeInput.value = saved || DEFAULT_TARGET_TIME;
+        }
+
+        function computeTargetDateTime() {
             const now = new Date();
+            const { hour, minute } = parseTargetTime(getSelectedTimeString());
+
             const target = new Date(
                 now.getFullYear(),
                 now.getMonth(),
                 now.getDate(),
-                TARGET_HOUR,
-                TARGET_MIN,
-                TARGET_SEC,
+                hour,
+                minute,
+                0,
                 0
             );
-            const diffMs = target.getTime() - now.getTime();
+
+            // Se já passou hoje, agenda para amanhã
+            if (target.getTime() <= now.getTime()) {
+                target.setDate(target.getDate() + 1);
+            }
+
+            return target;
+        }
+
+        function getSecondsUntilTarget() {
+            targetDateTime = computeTargetDateTime();
+            const diffMs = targetDateTime.getTime() - Date.now();
             return Math.max(0, Math.floor(diffMs / 1000));
+        }
+
+        function formatTargetDateInfo(date) {
+            const now = new Date();
+            const isToday =
+                date.getFullYear() === now.getFullYear() &&
+                date.getMonth() === now.getMonth() &&
+                date.getDate() === now.getDate();
+
+            const tomorrow = new Date(now);
+            tomorrow.setDate(now.getDate() + 1);
+
+            const isTomorrow =
+                date.getFullYear() === tomorrow.getFullYear() &&
+                date.getMonth() === tomorrow.getMonth() &&
+                date.getDate() === tomorrow.getDate();
+
+            const hh = pad2(date.getHours());
+            const mm = pad2(date.getMinutes());
+
+            if (isToday) return `Hoje às ${hh}:${mm}`;
+            if (isTomorrow) return `Amanhã às ${hh}:${mm}`;
+
+            return `${pad2(date.getDate())}/${pad2(date.getMonth() + 1)} às ${hh}:${mm}`;
+        }
+
+        function updatePresetButtons() {
+            const selected = getSelectedTimeString();
+            presetButtons.forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.time === selected);
+            });
+        }
+
+        function updateTargetInfo() {
+            const previewTarget = computeTargetDateTime();
+            const seconds = Math.max(0, Math.floor((previewTarget.getTime() - Date.now()) / 1000));
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+
+            let remainingText = '';
+            if (hours > 0) {
+                remainingText = `Faltam aproximadamente ${hours}h ${minutes}min.`;
+            } else {
+                remainingText = `Faltam aproximadamente ${minutes}min.`;
+            }
+
+            targetInfo.textContent = `Alvo programado: ${formatTargetDateInfo(previewTarget)}. ${remainingText}`;
+            updatePresetButtons();
         }
 
         function updateDisplay() {
@@ -262,28 +462,27 @@
             clearInterval(countdownInterval);
             isRunning = false;
 
-            timeInSeconds = getSecondsUntilTodayTarget();
+            timeInSeconds = getSecondsUntilTarget();
             totalAtStart = Math.max(1, timeInSeconds);
 
             updateDisplay();
+            updateTargetInfo();
+
             blackoutOverlay.classList.add('hidden', 'opacity-0');
             timerContainer.classList.add('hidden');
             startContainer.classList.remove('hidden');
         }
 
-        // ======= FULLSCREEN "SAFE" =======
+        // ======= FULLSCREEN =======
         async function requestFullscreenSafe() {
             try {
                 if (document.fullscreenElement) return;
                 if (document.documentElement.requestFullscreen) {
                     await document.documentElement.requestFullscreen();
                 }
-            } catch (_) {
-                // pode ser bloqueado sem gesto do usuário
-            }
+            } catch (_) { }
         }
 
-        // arma o fullscreen: no primeiro clique/tecla na janela, entra em tela cheia
         function armFullscreenOnFirstUserGesture() {
             const handler = async () => {
                 cleanup();
@@ -301,7 +500,7 @@
             window.addEventListener('touchstart', handler, true);
         }
 
-        // ======= SEGUNDA TELA (quando disponível) =======
+        // ======= SEGUNDA TELA =======
         function isAutostartWindow() {
             const p = new URLSearchParams(location.search);
             return p.get('autostart') === '1';
@@ -313,13 +512,13 @@
         }
 
         async function openOnSecondScreenIfPossible() {
-            if (isPopupWindow()) return false; // evita loop
+            if (isPopupWindow()) return false;
 
             const baseUrl = new URL(location.href);
             baseUrl.searchParams.set('popup', '1');
             baseUrl.searchParams.set('autostart', '1');
+            baseUrl.searchParams.set('targetTime', getSelectedTimeString());
 
-            // 1) Window Placement API (se disponível e permitido)
             if ('getScreenDetails' in window) {
                 try {
                     const details = await window.getScreenDetails();
@@ -347,7 +546,6 @@
                 } catch (_) { }
             }
 
-            // 2) Fallback simples
             try {
                 const approxLeft = (window.screenX || 0) + (window.outerWidth || 1200);
                 const approxTop = (window.screenY || 0);
@@ -372,10 +570,12 @@
         async function startTimer() {
             if (isRunning) return;
 
-            const moved = await openOnSecondScreenIfPossible();
-            if (moved) return; // a outra janela vai autostartar
+            saveSelectedTime();
 
-            timeInSeconds = getSecondsUntilTodayTarget();
+            const moved = await openOnSecondScreenIfPossible();
+            if (moved) return;
+
+            timeInSeconds = getSecondsUntilTarget();
             totalAtStart = Math.max(1, timeInSeconds);
 
             if (timeInSeconds <= 0) {
@@ -395,25 +595,38 @@
             updateDisplay();
 
             countdownInterval = setInterval(() => {
-                timeInSeconds--;
+                const remaining = Math.max(0, Math.floor((targetDateTime.getTime() - Date.now()) / 1000));
+                timeInSeconds = remaining;
                 updateDisplay();
+
                 if (timeInSeconds <= 0) finishAndClose();
-            }, 1000);
+            }, 250);
         }
 
         // ======= EVENTOS =======
         startButton.addEventListener('click', startTimer);
 
+        targetTimeInput.addEventListener('input', () => {
+            saveSelectedTime();
+            updateTargetInfo();
+        });
+
+        presetButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                targetTimeInput.value = btn.dataset.time;
+                saveSelectedTime();
+                updateTargetInfo();
+            });
+        });
+
         document.addEventListener('fullscreenchange', () => {
             if (!document.fullscreenElement && isRunning) resetApp();
         });
 
-        // ======= BLOQUEIOS (mais fortes contra "arrastar html") =======
         document.addEventListener('dragstart', e => e.preventDefault(), true);
         document.addEventListener('drop', e => e.preventDefault(), true);
         document.addEventListener('selectstart', e => e.preventDefault(), true);
 
-        // impede “arrasto”/seleção enquanto o timer estiver rodando (evita o ícone "html" no macOS)
         document.addEventListener('mousedown', (e) => {
             if (isRunning) e.preventDefault();
         }, { passive: false });
@@ -422,17 +635,36 @@
             if (isRunning && (e.buttons & 1)) e.preventDefault();
         }, { passive: false });
 
-        // Bloqueios “soft”
         document.addEventListener('copy', e => e.preventDefault());
         document.addEventListener('cut', e => e.preventDefault());
         document.addEventListener('keydown', e => {
             const k = e.key?.toLowerCase();
             if ((e.ctrlKey || e.metaKey) && ['s', 'p', 'u', 'c', 'i', 'j'].includes(k)) e.preventDefault();
             if (k === 'f12') e.preventDefault();
+
+            if (!isRunning && (k === 'enter' || k === ' ')) {
+                e.preventDefault();
+                startTimer();
+            }
         });
 
+        window.addEventListener('resize', refreshCircleMetrics);
+
         // ======= INICIALIZAÇÃO =======
+        function applyUrlTimeIfExists() {
+            const p = new URLSearchParams(location.search);
+            const targetTime = p.get('targetTime');
+            if (targetTime && /^\d{2}:\d{2}$/.test(targetTime)) {
+                targetTimeInput.value = targetTime;
+                localStorage.setItem(STORAGE_KEY, targetTime);
+                return;
+            }
+            loadSelectedTime();
+        }
+
         loadBackgroundImages();
+        applyUrlTimeIfExists();
+        refreshCircleMetrics();
         resetApp();
 
         if (isAutostartWindow()) {
